@@ -10,16 +10,24 @@ public class Server{
   ServerSocket welcomeSocket;
 
   public static void main(String[] args) throws Exception{
-
-    new Server();
+    try{
+      new Server(Integer.parseInt(args[0]));
+    }catch(Throwable e){
+      //Catching Trowable instead of Exception allows for catching runtime
+      //exceptions such as arrayoutofbounds. This is not recommended for production
+      //code, as all runtime exceptions will be caught. To repeat: DO NOT COPY!!
+      //In this case, this simply allows us to retry starting up our server. 
+      System.err.println("Unable to parse portnr, starting at default 4444 port");
+      new Server(4444);
+    }
   }
-  public Server(){
+  public Server(int portnr){
     System.out.println("Server starting... \nAwaiting connections");
     while(true){
       try{
         //TODO
         // Change so that during startup the ServerSocket port num can be changed.
-        welcomeSocket = new ServerSocket(4444);
+        welcomeSocket = new ServerSocket(portnr);
         int i = 1;
         while(true){
           new Thread(new CalcThread(welcomeSocket.accept()));
