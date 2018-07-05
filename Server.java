@@ -14,8 +14,8 @@ public class Server{
       if(args.length > 0)
         new Server(Integer.parseInt(args[0]));
       else{
-        System.err.println("No portnr specified, falling back to default (4444)");
-        new Server(4444);
+        System.err.println("No portnr specified, falling back to default (9090)");
+        new Server(9090);
       }
     }catch(Exception e){
       System.err.println(e.getMessage());
@@ -28,11 +28,11 @@ public class Server{
     while(true){
       try{
         welcomeSocket = new ServerSocket(portnr);
-        int i = 1;
+        int clientnr = 0;
         while(true){
-          new Thread(new CalcThread(welcomeSocket.accept()));
-          System.out.println("Client "+i+" connected");
-          i++;
+          Thread t = new Thread(new CalcThread(welcomeSocket.accept(), clientnr++));
+          t.start();
+
         }
       }catch(IOException e){
         System.err.println("Failed to run as intended, restarting...");
@@ -42,13 +42,17 @@ public class Server{
   /*
   / This thread is run for each connecting client.
   */
-  private class CalcThread implements Runnable{
+  private class CalcThread extends Thread{
     private Socket socket;
-    ObjectOutputStream out;
-    BufferedReader in;
+    private ObjectOutputStream out;
+    private BufferedReader in;
+    private int clientnr;
 
-    public CalcThread(Socket socket){
-      socket = this.socket;
+
+    public CalcThread(Socket socket, int clientnr){
+      this.socket = socket;
+      this.clientnr = clientnr;
+      System.out.println("Client number "+clientnr+" connected");
     }
     /*
     / This code-block is called when the thread is created, and reads in and
@@ -74,12 +78,16 @@ public class Server{
           Math.abs(Integer.parseInt(commands[7])),
           Math.abs(Integer.parseInt(commands[8]))),
           "png",out);
-          socket.close();
+        System.out.printf("Client connection %d finished\n", clientnr);
+        socket.close();
       }catch(Exception e){
-        // Fail silently
+        e.printStackTrace();
+
         try{
           socket.close();
-        }catch(Exception ee){}
+        }catch(Exception ee){
+
+        }
       }
     }
 
@@ -104,16 +112,28 @@ public class Server{
                             int y,
                             int inf_n){
 
-      BufferedImage image = new BufferedImage(x,y,BufferedImage.TYPE_BYTE_GRAY);
-      int istep = (int) ((max_c_re-min_c_re)/(double) x);
-      int jstep = (int) ((max_c_im-min_c_im)/(double) y);
+      BufferedImage image = new BufferedImage(x,y,BufferedImage.TYPE_INT_RGB);
+      BufferedImage gray = new BufferedImage(x,y,BufferedImage.TYPE_BYTE_GRAY);
+      ColorConvertOp filter = new ColorConvertOp(
+                                image.getColorModel().getColorSpace(),
+                                gray.getColorModel().getColorSpace(),
+                                null);
+      double istep =  ((max_c_re-min_c_re)/(double) x);
+      double jstep =  ((max_c_im-min_c_im)/(double) y);
       int newval;
-      for(int i = 0; i < x; i++)
+      for(int i = 0; i < x; i++){
         for(int j = 0; j < y; j++){
           newval = calcPixel(min_c_re+i*istep, min_c_im+j*jstep, inf_n);
-          image.setRGB(i,j,newval);
+          image.setRGB(i,j,newval%256);
         }
-      return image;
+
+      }
+      // try{
+        // File f = new File("pictureServerside.png");
+        // ImageIO.write(image, "png", f);
+      // }catch(Exception e){}
+        filter.filter(image,gray);
+      return gray;
     }
     /*
     / From here on is the real Mandelbrot calculation for each pixel
@@ -121,15 +141,17 @@ public class Server{
     */
     private int calcPixel(double c_re, double c_im, int n){
 
-      double c_re_prev;
-      double c_im_prev;
-      double c = Math.sqrt(c_re*c_re + c_im*c_im);
+      double u = 0;
+      double v = 0;
+      double u2 = 0;
+      double v2 = 0;
+      double c = c_re*c_re + c_im*c_im;
       for(int i = 0; i < n; i++){
-        c_re_prev = c_re;
-        c_im_prev = c_im;
-        c_re = c_re*c_re - c_im*c_im;
-        c_im = c_re_prev * c_im_prev;
-        if(Math.sqrt(c_re*c_re + c_im*c_im) > c)
+        v = 2*u*v+c_im;
+        u= u2-v2+c_re;
+        u2=u*u;
+        v2=v*v;
+        if(u2+v2 > 4)
           return i+1;
       }
       return n;
