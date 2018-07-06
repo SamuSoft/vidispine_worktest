@@ -1,7 +1,6 @@
 import java.io.*;
 import java.net.*;
 import java.lang.Thread;
-import java.lang.Runnable;
 import java.math.*;
 import java.awt.image.*;
 import javax.imageio.ImageIO;
@@ -126,13 +125,8 @@ public class Server{
           newval = calcPixel(min_c_re+i*istep, min_c_im+j*jstep, inf_n);
           image.setRGB(i,j,newval%256);
         }
-
       }
-      // try{
-        // File f = new File("pictureServerside.png");
-        // ImageIO.write(image, "png", f);
-      // }catch(Exception e){}
-        filter.filter(image,gray);
+      filter.filter(image,gray);
       return gray;
     }
     /*

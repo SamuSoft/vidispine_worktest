@@ -6,10 +6,10 @@ import java.awt.image.*;
 import javax.imageio.ImageIO;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Random;
 public class Client{
 
   private BufferedImage[] images;
-
   public void saveToImageBuffer(BufferedImage image, int index) throws Exception{
     if(images == null){
       throw new Exception("Image buffer not yet initialized");
@@ -36,16 +36,24 @@ public class Client{
         throw new Exception();
       }
 
+
       //Split up the addresses and port nums
-      String[][] addresslist = new String[args.length-8][2];
+      ArrayList<String> addressList = new ArrayList<String>();
+      Pattern pattern = Pattern.compile("[[0-9]{3,}\\.]{4}:[0-9]{4}");
+      Pattern patternLocal = Pattern.compile("localhost:[0-9]{4}");
       for(int i = 8; i < args.length; i++){
-        addresslist[i-8] = args[i].split(":");
+        if(pattern.matcher(args[i]).matches())
+          addressList.add(args[i]);
+        else if(patternLocal.matcher(args[i]).matches())
+          addressList.add(InetAddress.getLocalHost().getHostAddress() +":"+ args[i].split(":")[1]);
       }
-      new Client(min_c_re, min_c_im, max_c_re, max_c_im, n, x, y, div, addresslist);
+      if(addressList.size() == 0)
+        throw new Exception();
+      new Client(min_c_re, min_c_im, max_c_re, max_c_im, n, x, y, div, addressList);
     }catch(Exception e){
       e.printStackTrace();
-      System.err.println("Invalid input");
-      System.exit(0);
+      System.err.println(e.getMessage());
+      System.exit(1);
     }
 
   }
@@ -72,34 +80,64 @@ public class Client{
                 int x,
                 int y,
                 int div,
-                String[][] addresslist)
+                ArrayList<String> addresslist)
   {
+    images = new BufferedImage[div];
     double c_re_stepval = (max_c_re-min_c_re)/x;
     double c_im_stepval = (max_c_im-min_c_im)/y;
-    if(div <= x || div <= y){
-
+    int xstep = x;
+    if(div > x){
+      div = x;
     }else{
       //TODO
       //If bigger than the dimensions of the picture use kdtree algorithm
-      //lookalike to split picture
+      //lookalike to split picture and then reassemble it again
     }
     try{
+      xstep = x/div;
+      String[] address;
+      int addressindex;
+      Random random = new Random(System.currentTimeMillis());
+      ArrayList<Thread> list = new ArrayList<Thread>();
+      //Starting threads to give out work to servers
+      for(int i = 0; i < div; i++){
+        //Ranomly chooses which server to connect to;
+        addressindex = random.nextInt()%(addresslist.size());
+        address = addresslist.get(addressindex).split(":");
+        // System.err.println(address[0]);
+        list.add(
+          new ClientThread(
+            this,
+            (min_c_re + c_re_stepval*i),
+            min_c_im,
+            (min_c_re + c_re_stepval*(i+1)),
+            min_c_im,
+            n,
+            (x==(div-1)) ? xstep + x%div : xstep, //In case of uneven picturesplit
+            y,
+            InetAddress.getByName(address[0]),
+            Integer.parseInt(address[1]),
+            i)
+          );
+        list.get(i).start();
+      }
+      // Waiting for servers to reply
+      for(Thread t : list){
+        t.join();
+      }
 
-      images = new BufferedImage[1];
-      Thread t = new ClientThread(this,
-                                  min_c_re,
-                                  min_c_im,
-                                  max_c_re,
-                                  max_c_im,
-                                  n,
-                                  x,
-                                  y, InetAddress.getLocalHost(),9090,0);
-      t.start();
+      //Merging images
+      BufferedImage mergedImage = new BufferedImage(x, y, BufferedImage.TYPE_INT_RGB);
+      for(int i = 0; i < div; i++){
+        mergedImage.createGraphics().drawImage(images[i],null,i*xstep,0);
+      }
 
-      // Writing image to file
-      File f = new File("picture.png");
-      ImageIO.write(images[0], "png", f);
-    }catch(Exception e){}
+      File f = new File("mandelbrot.png");
+      ImageIO.write(mergedImage, "png", f);
+    }catch(Exception e){
+      e.printStackTrace();
+      System.out.println(e.getMessage());
+    }
 
 
   }
@@ -142,7 +180,6 @@ public class Client{
 
     public void run(){
       try{
-
         Socket socket = new Socket(address, portnr);
         //Autoflush on
         PrintWriter out = new PrintWriter(socket.getOutputStream(),true);
